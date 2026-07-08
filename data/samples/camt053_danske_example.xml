@@ -1,0 +1,540 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02 camt.053.001.02.xsd">
+		<!-- Danske Bank CAMT053 example file for Denmark -->
+	  <!-- Balances in the file does not match the transactions booked -->
+		<!-- Payment types included: 4 credits and 2 debits -->
+		<!-- Source (public sample): https://danskeci.com/-/media/pdf/danskeci-com/iso-20022-xml/camt053_dk_example.xml -->
+	<BkToCstmrStmt>
+		<GrpHdr>
+			<MsgId>XXX24Y4XXX1Y000000001</MsgId>
+			<CreDtTm>2023-04-20T23:24:31</CreDtTm>
+		</GrpHdr>
+		<Stmt>
+			<Id>XXX24Y4XXX1Y000000001</Id>
+			<ElctrncSeqNb>1</ElctrncSeqNb>
+			<LglSeqNb>1</LglSeqNb>
+			<CreDtTm>2023-04-20T23:24:31</CreDtTm>
+			<FrToDt>
+				<FrDtTm>2023-04-20T00:00:00</FrDtTm>
+				<ToDtTm>2023-04-20T23:59:59</ToDtTm>
+			</FrToDt>
+			<Acct>
+				<Id>
+					<IBAN>DK8030000001234567</IBAN>
+				</Id>
+				<Ccy>DKK</Ccy>
+				<Nm>Danske Corporate</Nm>
+				<Ownr>
+					<Nm>Account owner</Nm>
+					<PstlAdr>
+						<StrtNm>Streetname</StrtNm>
+						<BldgNb>20</BldgNb>
+						<PstCd>1234</PstCd>
+						<TwnNm>Townname</TwnNm>
+						<Ctry>DK</Ctry>
+					</PstlAdr>
+					<Id>
+						<OrgId>
+							<Othr>
+								<Id>0012345678</Id>
+								<SchmeNm>
+									<Cd>CUST</Cd>
+								</SchmeNm>
+							</Othr>
+						</OrgId>
+					</Id>
+				</Ownr>
+				<Svcr>
+					<FinInstnId>
+						<BIC>DABADKKK</BIC>
+					</FinInstnId>
+				</Svcr>
+			</Acct>
+			<Bal>
+				<Tp>
+					<CdOrPrtry>
+						<Cd>OPBD</Cd>
+					</CdOrPrtry>
+				</Tp>
+				<Amt Ccy="DKK">12345.67</Amt>
+				<CdtDbtInd>DBIT</CdtDbtInd>
+				<Dt>
+					<Dt>2023-04-20</Dt>
+				</Dt>
+			</Bal>
+			<Bal>
+				<Tp>
+					<CdOrPrtry>
+						<Cd>CLBD</Cd>
+					</CdOrPrtry>
+				</Tp>
+				<Amt Ccy="DKK">23456.78</Amt>
+				<CdtDbtInd>DBIT</CdtDbtInd>
+				<Dt>
+					<Dt>2023-04-20</Dt>
+				</Dt>
+			</Bal>
+			<TxsSummry>
+				<TtlNtries>
+					<NbOfNtries>6</NbOfNtries>
+					<TtlNetNtryAmt>343174.12</TtlNetNtryAmt>
+					<CdtDbtInd>DBIT</CdtDbtInd>
+				</TtlNtries>
+				<TtlCdtNtries>
+					<NbOfNtries>4</NbOfNtries>
+					<Sum>3163.89</Sum>
+				</TtlCdtNtries>
+				<TtlDbtNtries>
+					<NbOfNtries>2</NbOfNtries>
+					<Sum>346338.01</Sum>
+				</TtlDbtNtries>
+			</TxsSummry>
+
+			<!-- Incoming foreign payment example -->
+			<Ntry>
+				<NtryRef>1</NtryRef>
+				<Amt Ccy="DKK">591.15</Amt>
+				<CdtDbtInd>CRDT</CdtDbtInd>
+				<Sts>BOOK</Sts>
+				<BookgDt>
+					<Dt>2023-04-20</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2023-04-20</Dt>
+				</ValDt>
+				<AcctSvcrRef>012X123456789012</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>RCDT</Cd>
+							<SubFmlyCd>XBCT</SubFmlyCd>
+						</Fmly>
+					</Domn>
+					<Prtry>
+						<Cd>BETAL. 3825-0123456789</Cd>
+						<Issr>DBA</Issr>
+					</Prtry>
+				</BkTxCd>
+				<AddtlInfInd>
+					<MsgNmId>O1XXXXXXX67X1X</MsgNmId>
+				</AddtlInfInd>
+				<NtryDtls>
+					<TxDtls>
+						<Refs>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+							<TxId>3825-0123456789</TxId>
+						</Refs>
+						<AmtDtls>
+							<InstdAmt>
+								<Amt Ccy="DKK">591.15</Amt>
+							</InstdAmt>
+							<TxAmt>
+								<Amt Ccy="DKK">591.15</Amt>
+							</TxAmt>
+							<PrtryAmt>
+								<Tp>IBS</Tp>
+								<Amt Ccy="DKK">591.15</Amt>
+							</PrtryAmt>
+						</AmtDtls>
+						<RltdPties>
+							<Dbtr>
+								<Nm>Debtor</Nm>
+								<PstlAdr>
+									<Ctry>SE</Ctry>
+									<AdrLine>First addressline</AdrLine>
+								</PstlAdr>
+							</Dbtr>
+							<DbtrAcct>
+								<Id>
+									<IBAN>SE5180000810512345678901</IBAN>
+								</Id>
+							</DbtrAcct>
+							<Cdtr>
+								<Nm>Creditor</Nm>
+								<PstlAdr>
+									<AdrLine>First address line</AdrLine>
+								</PstlAdr>
+							</Cdtr>
+						</RltdPties>
+						<RltdAgts>
+							<DbtrAgt>
+								<FinInstnId>
+									<BIC>SWEDSESS</BIC>
+									<Nm>SWEDBANK AB (PUBL)</Nm>
+								</FinInstnId>
+							</DbtrAgt>
+						</RltdAgts>
+						<RmtInf>
+							<Ustrd>Unstructured remittance information</Ustrd>
+						</RmtInf>
+						<RltdDts>
+							<AccptncDtTm>2023-04-18T01:01:01</AccptncDtTm>
+						</RltdDts>
+						<AddtlTxInf>Beregnede gebyrer: DKK 38,00 Gebyr konto: 1234567890</AddtlTxInf>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+
+			<!-- Incoming FIK payment example (bulk: 2 transactions) -->
+			<Ntry>
+				<NtryRef>2</NtryRef>
+				<Amt Ccy="DKK">1101.88</Amt>
+				<CdtDbtInd>CRDT</CdtDbtInd>
+				<Sts>BOOK</Sts>
+				<BookgDt>
+					<Dt>2023-04-20</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2023-04-20</Dt>
+				</ValDt>
+				<AcctSvcrRef>FISAM.POST</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>RCDT</Cd>
+							<SubFmlyCd>VCOM</SubFmlyCd>
+						</Fmly>
+					</Domn>
+					<Prtry>
+						<Cd>DIV.INDB.KORT 87654321 / 71</Cd>
+						<Issr>DBA</Issr>
+					</Prtry>
+				</BkTxCd>
+				<NtryDtls>
+					<Btch>
+						<NbOfTxs>2</NbOfTxs>
+					</Btch>
+					<TxDtls>
+						<Refs>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<AmtDtls>
+							<TxAmt>
+								<Amt Ccy="DKK">528.94</Amt>
+							</TxAmt>
+						</AmtDtls>
+						<BkTxCd>
+							<Prtry>
+								<Cd>71/0000123456789012345</Cd>
+							</Prtry>
+						</BkTxCd>
+						<RltdPties>
+							<CdtrAcct>
+								<Id>
+									<Othr>
+										<Id>87654321</Id>
+									</Othr>
+								</Id>
+							</CdtrAcct>
+						</RltdPties>
+						<RmtInf>
+							<Strd>
+								<CdtrRefInf>
+									<Tp>
+										<CdOrPrtry>
+											<Cd>SCOR</Cd>
+										</CdOrPrtry>
+									</Tp>
+									<Ref>71/0000123456789012345</Ref>
+								</CdtrRefInf>
+							</Strd>
+						</RmtInf>
+						<RltdDts>
+							<AccptncDtTm>2023-04-19T01:01:01</AccptncDtTm>
+						</RltdDts>
+					</TxDtls>
+					<TxDtls>
+						<Refs>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<AmtDtls>
+							<TxAmt>
+								<Amt Ccy="DKK">572.94</Amt>
+							</TxAmt>
+						</AmtDtls>
+						<BkTxCd>
+							<Prtry>
+								<Cd>71/0000543210987654321</Cd>
+							</Prtry>
+						</BkTxCd>
+						<RltdPties>
+							<CdtrAcct>
+								<Id>
+									<Othr>
+										<Id>87654321</Id>
+									</Othr>
+								</Id>
+							</CdtrAcct>
+						</RltdPties>
+						<RmtInf>
+							<Strd>
+								<CdtrRefInf>
+									<Tp>
+										<CdOrPrtry>
+											<Cd>SCOR</Cd>
+										</CdOrPrtry>
+									</Tp>
+									<Ref>71/0000543210987654321</Ref>
+								</CdtrRefInf>
+							</Strd>
+						</RmtInf>
+						<RltdDts>
+							<AccptncDtTm>2023-04-19T01:01:01</AccptncDtTm>
+						</RltdDts>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+
+			<!-- Incoming domestic payment example -->
+			<Ntry>
+				<NtryRef>3</NtryRef>
+				<Amt Ccy="DKK">150.86</Amt>
+				<CdtDbtInd>CRDT</CdtDbtInd>
+				<Sts>BOOK</Sts>
+				<BookgDt>
+					<Dt>2023-04-20</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2023-04-20</Dt>
+				</ValDt>
+				<AcctSvcrRef>1234569988</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>RCDT</Cd>
+							<SubFmlyCd>DMCT</SubFmlyCd>
+						</Fmly>
+					</Domn>
+					<Prtry>
+						<Cd>81223344</Cd>
+						<Issr>DBA</Issr>
+					</Prtry>
+				</BkTxCd>
+				<AddtlInfInd>
+					<MsgNmId>XXXXXXYYYYOO1X</MsgNmId>
+				</AddtlInfInd>
+				<NtryDtls>
+					<TxDtls>
+						<Refs>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<AmtDtls>
+							<TxAmt>
+								<Amt Ccy="DKK">150.86</Amt>
+							</TxAmt>
+						</AmtDtls>
+						<RltdPties>
+							<Dbtr>
+								<Nm>Debtor</Nm>
+								<PstlAdr>
+									<AdrLine>First address line</AdrLine>
+									<AdrLine>Second address line</AdrLine>
+								</PstlAdr>
+							</Dbtr>
+							<DbtrAcct>
+								<Id>
+									<Othr>
+										<Id>3100 1234567890</Id>
+									</Othr>
+								</Id>
+							</DbtrAcct>
+						</RltdPties>
+						<RmtInf>
+							<Ustrd>Invoice number 11223344</Ustrd>
+							<Ustrd>Invoice number 11223345</Ustrd>
+							<Ustrd>Invoice number 11223346</Ustrd>
+						</RmtInf>
+						<RltdDts>
+							<AccptncDtTm>2023-04-20T01:01:01</AccptncDtTm>
+						</RltdDts>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+
+			<!-- Outgoing foreign payment example -->
+			<Ntry>
+				<NtryRef>4</NtryRef>
+				<Amt Ccy="DKK">344278.01</Amt>
+				<CdtDbtInd>DBIT</CdtDbtInd>
+				<Sts>BOOK</Sts>
+				<BookgDt>
+					<Dt>2023-04-19</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2023-04-19</Dt>
+				</ValDt>
+				<AcctSvcrRef>1712345678</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>ICDT</Cd>
+							<SubFmlyCd>XBCT</SubFmlyCd>
+						</Fmly>
+					</Domn>
+					<Prtry>
+						<Cd>DBT.XXXX YYX 1-1234567890</Cd>
+						<Issr>DBA</Issr>
+					</Prtry>
+				</BkTxCd>
+				<AddtlInfInd>
+					<MsgNmId>XXXXX5XX8XX1X</MsgNmId>
+				</AddtlInfInd>
+				<NtryDtls>
+					<TxDtls>
+						<Refs>
+							<PmtInfId>Payment Information ID</PmtInfId>
+							<InstrId>Instruction Id</InstrId>
+							<EndToEndId>EndToEndId</EndToEndId>
+							<TxId>3001-123456789012</TxId>
+						</Refs>
+						<AmtDtls>
+							<InstdAmt>
+								<Amt Ccy="EUR">46064.52</Amt>
+							</InstdAmt>
+							<TxAmt>
+								<Amt Ccy="DKK">344278.01</Amt>
+								<CcyXchg>
+									<SrcCcy>EUR</SrcCcy>
+									<TrgtCcy>DKK</TrgtCcy>
+									<UnitCcy>EUR</UnitCcy>
+									<XchgRate>7.4738000</XchgRate>
+								</CcyXchg>
+							</TxAmt>
+						</AmtDtls>
+						<RltdPties>
+							<Cdtr>
+								<Nm>Creditor</Nm>
+								<PstlAdr>
+									<Ctry>NL</Ctry>
+									<AdrLine>First addressline</AdrLine>
+									<AdrLine>Second addressline</AdrLine>
+								</PstlAdr>
+							</Cdtr>
+							<CdtrAcct>
+								<Id>
+									<IBAN>NL11ABNA1234567890</IBAN>
+								</Id>
+							</CdtrAcct>
+						</RltdPties>
+						<RltdAgts>
+							<CdtrAgt>
+								<FinInstnId>
+									<BIC>ABNANL2A</BIC>
+								</FinInstnId>
+							</CdtrAgt>
+						</RltdAgts>
+						<RmtInf>
+							<Ustrd>Unstructured remittance information</Ustrd>
+						</RmtInf>
+						<RltdDts>
+							<AccptncDtTm>2023-04-19T01:01:01</AccptncDtTm>
+						</RltdDts>
+						<AddtlTxInf>Vores gebyr: DKK 1,00</AddtlTxInf>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+
+			<!-- Incoming card transaction (DKSSL) -->
+			<Ntry>
+				<NtryRef>5</NtryRef>
+				<Amt Ccy="DKK">1320.00</Amt>
+				<CdtDbtInd>CRDT</CdtDbtInd>
+				<Sts>BOOK</Sts>
+				<BookgDt>
+					<Dt>2023-04-20</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2023-04-20</Dt>
+				</ValDt>
+				<AcctSvcrRef>0000000000</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>MCRD</Cd>
+							<SubFmlyCd>POSP</SubFmlyCd>
+						</Fmly>
+					</Domn>
+					<Prtry>
+						<Cd>DKSSL 1234 1234567ZZ1XXXXX09Y</Cd>
+						<Issr>DBA</Issr>
+					</Prtry>
+				</BkTxCd>
+				<NtryDtls>
+					<TxDtls>
+						<Refs>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<AmtDtls>
+							<TxAmt>
+								<Amt Ccy="DKK">1320.00</Amt>
+							</TxAmt>
+						</AmtDtls>
+						<RltdDts>
+							<AccptncDtTm>2023-04-20T01:01:01</AccptncDtTm>
+						</RltdDts>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+
+			<!-- Outgoing domestic FIK payment -->
+			<Ntry>
+				<NtryRef>6</NtryRef>
+				<Amt Ccy="DKK">2060.00</Amt>
+				<CdtDbtInd>DBIT</CdtDbtInd>
+				<Sts>BOOK</Sts>
+				<BookgDt>
+					<Dt>2023-05-09</Dt>
+				</BookgDt>
+				<ValDt>
+					<Dt>2023-05-09</Dt>
+				</ValDt>
+				<AcctSvcrRef>2112345678</AcctSvcrRef>
+				<BkTxCd>
+					<Domn>
+						<Cd>PMNT</Cd>
+						<Fmly>
+							<Cd>ICDT</Cd>
+							<SubFmlyCd>DMCT</SubFmlyCd>
+						</Fmly>
+					</Domn>
+					<Prtry>
+						<Cd>TELESERVICE 1722334455</Cd>
+						<Issr>DBA</Issr>
+					</Prtry>
+				</BkTxCd>
+				<AddtlInfInd>
+					<MsgNmId>UVDPMCV1BLZU1B</MsgNmId>
+				</AddtlInfInd>
+				<NtryDtls>
+					<TxDtls>
+						<Refs>
+							<EndToEndId>NOTPROVIDED</EndToEndId>
+						</Refs>
+						<AmtDtls>
+							<TxAmt>
+								<Amt Ccy="DKK">2060.00</Amt>
+							</TxAmt>
+						</AmtDtls>
+						<RltdPties>
+							<CdtrAcct>
+								<Id>
+									<Othr>
+										<Id>82123456</Id>
+									</Othr>
+								</Id>
+							</CdtrAcct>
+						</RltdPties>
+						<RltdDts>
+							<AccptncDtTm>2023-05-09T01:01:01</AccptncDtTm>
+						</RltdDts>
+					</TxDtls>
+				</NtryDtls>
+			</Ntry>
+		</Stmt>
+	</BkToCstmrStmt>
+</Document>
