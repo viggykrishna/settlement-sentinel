@@ -25,6 +25,7 @@ from pathlib import Path
 
 import history
 from adapters.camt053 import extract_reference_from_remit
+from rulebook import get_scheme_rules
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -123,6 +124,25 @@ TOOL_DEFINITIONS = [
             "required": ["remit_info"],
         },
     },
+    {
+        "name": "get_scheme_rules",
+        "description": (
+            "Load the settlement semantics for the scheme profile in force "
+            "(INSTANT_RAIL or BATCH_NET): settlement model, finality, "
+            "duplicate handling, whether missing-in-scheme can be a timing "
+            "difference, reconciliation window, and fee treatment. Call "
+            "this FIRST and ground every severity decision in these rules "
+            "— e.g. on an instant rail a missing-in-scheme item can NEVER "
+            "be a same-rail timing difference, and fees are rarely netted."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "profile": {"type": "string",
+                            "enum": ["INSTANT_RAIL", "BATCH_NET"]},
+            },
+        },
+    },
 ]
 
 TOOL_FUNCTIONS = {
@@ -131,4 +151,6 @@ TOOL_FUNCTIONS = {
                                                  inp.get("ref_contains")),
     "get_fee_schedule": lambda inp: get_fee_schedule(),
     "extract_reference": lambda inp: extract_reference(inp["remit_info"]),
+    "get_scheme_rules": lambda inp: get_scheme_rules(
+        inp.get("profile", "BATCH_NET")),
 }

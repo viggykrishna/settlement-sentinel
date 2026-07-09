@@ -1,64 +1,77 @@
 # Settlement Sentinel
 
-**A Claude-powered agent that reconciles payment scheme settlement files and triages exceptions the way a senior ops analyst would — investigating before it decides, and never acting on risky items without human approval.**
+**A payment-scheme reconciliation agent, built by a payments operator. Deterministic matching, rulebook-grounded agentic triage, human-gated resolution — available as a CLI pipeline and as an MCP server that Claude can drive directly.**
 
-Built by a payments operator, not a demo-builder: I run reconciliation operations for live European payment schemes (instant rails, batch clearing, in-house clearing) and manage the team that triages these exceptions manually every day. This project automates the part of that workflow where AI genuinely helps — and deliberately keeps it out of the part where it doesn't.
+I run reconciliation operations for live European payment schemes (instant rails, batch clearing, in-house clearing) and manage the team that triages these exceptions by hand every settlement window. This project automates the part of that workflow where AI genuinely helps — and deliberately keeps it out of the part where it doesn't.
 
 ---
 
-## The problem
+## Architecture
 
-Every settlement window, a payment scheme sends participants a settlement file. The participant's ops team must reconcile it against the internal ledger. In the real world this never matches cleanly:
+```
+                 ┌──────────────────────── DOMAIN CORE (deterministic) ───────────────────────┐
+camt.053 ──►     │                                                                            │
+ adapter  ──►  matcher ──► exceptions ──► triage agent ──► approval gate ──► report + audit log
+ledger CSV ──►   │             │          (Claude + tools)      │                              │
+                 └─────────────┼────────────────┬───────────────┼──────────────────────────────┘
+                               │                │               │
+                               │        investigation tools     └── approved resolutions ──┐
+                               │        ├ get_scheme_rules  ◄── scheme rulebook semantics  │
+                               │        ├ check_next_window                                │
+                               │        ├ get_fee_schedule                                 │
+                               │        ├ lookup_history  ◄────── learning loop ◄──────────┘
+                               │        └ extract_reference
+                               │
+                     MCP server (src/mcp_server.py)
+                     exposes ALL of the above as MCP tools
+                     → Claude Desktop / Claude Code drives the
+                       whole workflow conversationally
+```
 
-| Exception | What it means | Risk |
+Two runtimes, one set of tools:
+
+| Mode | Who is the runtime | Who reasons |
 |---|---|---|
-| Duplicate scheme entry | Potential double-settlement | 🔴 Money at risk |
-| Missing in ledger | Scheme moved money we never booked | 🔴 Money at risk |
-| Missing in scheme file | We booked money the scheme never settled | 🟡 Timing or real gap |
-| Amount mismatch | Often fees netted at settlement | 🟡 Fee-mapping fix |
-| Reference format drift | Legacy truncation, same money | 🟢 Auto-resolvable |
+| **CLI** (`src/main.py`) | This codebase | Claude via API (agentic tool-use loop) |
+| **MCP** (`src/mcp_server.py`) | Claude Desktop / Code | Claude in the client, calling the same domain tools over MCP |
 
-Today, ops analysts triage these by hand — deciding severity, root cause, and action per exception. That judgment is exactly the kind of structured, rule-informed reasoning Claude does well.
+The MCP server deliberately contains **no nested model calls** — in MCP mode, Claude in the client *is* the triage agent, and the server exposes only deterministic, auditable domain tools. Model reasoning happens in one place, visible to the user, never hidden inside a tool result.
 
-## The design principle
+## Why a payments operator built this differently
 
-> **Deterministic matching. Agentic triage. Human-gated resolution.**
+Three design decisions that come from running scheme operations, not from generic engineering judgment:
 
+1. **The matcher is not allowed to be intelligent.** Matching is exact-reference first, then one conservative fuzzy pass (reference-prefix + identical amount + identical value date). A probabilistic model must never decide whether two ledger entries are the same money — because the reconciliation attestation you sign at end of day has to be reproducible. AI enters only *after* matching, where the work is judgment, not arithmetic.
+
+2. **Severity comes from the rulebook, not the pattern.** The same exception means different things on different rails, and the triage agent is forced to load the scheme's settlement semantics (`get_scheme_rules`) before classifying. A missing-in-scheme booking on a **batch-net** scheme is often a cutoff timing difference — check the next cycle before escalating. The identical exception on an **instant rail** can *never* be a same-rail timing difference, because there is no cutoff — it means the payment was booked but never settled. Same pattern, opposite action. A pattern-matching classifier gets this wrong; an analyst who knows the rulebook doesn't.
+
+3. **Autonomy is severity-gated, and the boundary is enforced in code.** The agent auto-closes only P3 + auto-resolvable items (logged as `sentinel-auto`). Everything else requires an explicit human approval, and in non-interactive mode risky items stay OPEN rather than being closed by default. Every decision — automatic or human — lands in an immutable audit log with actor attribution. The agent proposes; the human disposes. The same boundary applies over MCP: `record_resolution` is the only write tool on the server and requires a named human approver.
+
+## The agent investigates before it classifies
+
+For each exception, Claude uses the same checks a senior analyst runs, and must cite its evidence per exception (the full tool-call log goes into the report):
+
+- `get_scheme_rules` — load the settlement semantics in force (finality, duplicate handling, fee treatment, recon window)
+- `check_next_window` — is this "missing" settlement just the next cycle? (verified in eval data: timing differences vs genuine gaps are distinguished correctly)
+- `get_fee_schedule` — does an amount-mismatch delta exactly match a fee netted at settlement?
+- `lookup_history` — how did *this team* resolve the same pattern before? (approved resolutions feed back as few-shot context — the learning loop)
+- `extract_reference` — recover a reference buried in free-text remittance info
+
+## Evaluation
+
+`evals/run_eval.py` builds a labeled synthetic set (32 exception cases across 8 scenario types, each with ground-truth bucket and rulebook-derived expected severity) and reports precision/recall per class:
+
+- **Layer 1 — deterministic matcher** (offline): bucket classification. The matcher promises exactness; current result is 1.00 precision/recall across all buckets — anything less is a bug, not a tuning problem.
+- **Layer 2 — agentic triage** (`--with-ai`): severity classification against rulebook-derived ground truth, including the cases that *require* investigation to get right (fee vs non-fee mismatches, timing vs genuine gaps).
+
+```bash
+python evals/run_eval.py            # layer 1, offline
+python evals/run_eval.py --with-ai  # layers 1 + 2 (needs ANTHROPIC_API_KEY)
 ```
-camt.053 / CSV ─┐
-                ├─► deterministic matcher ─► exceptions ─► Claude agent ──► approval gate ─► report + audit log
-ledger ─────────┘        (auditable)                       │    ▲                │
-                                                     tools ▼    │           resolutions feed
-                                              check_next_window │           back into history
-                                              lookup_history ───┘           (learning loop)
-                                              get_fee_schedule
-                                              extract_reference
-```
-
-1. **Deterministic matching** (`src/reconcile.py`) — pure, auditable code. A probabilistic model should never decide whether two ledger entries are the same money.
-2. **Agentic triage** (`src/triage_agent.py`) — Claude investigates each exception with real tools *before* classifying, the same checks a senior analyst performs:
-   - `check_next_window` — is a "missing in scheme file" item just a cutoff/timing difference? (Found next window → P3 timing note. Not found → genuine gap, escalate.)
-   - `get_fee_schedule` — does an amount-mismatch delta exactly match a known scheme fee netted at settlement?
-   - `lookup_history` — how did *this team* resolve the same pattern before?
-   - `extract_reference` — recover a reference buried in free-text remittance info.
-
-   Every tool call is captured in an **investigation log** in the report — the agent shows its working.
-3. **Approval gate** (`src/approval.py`) — the consent boundary that agentic payments actually hinges on:
-   - P3 + auto-resolvable → closed automatically, logged as `sentinel-auto`.
-   - P1/P2 or anything not auto-resolvable → requires an explicit human approve/skip. In non-interactive mode risky items stay **OPEN** — the agent never closes them alone.
-   - Every decision (automatic or human) is appended to an immutable audit log (`data/audit_log.jsonl`).
-4. **Learning loop** (`src/history.py`) — approved resolutions are persisted and injected into the next window's triage as few-shot context. Today's human decisions become tomorrow's agent calibration.
 
 ## Real scheme file format: ISO 20022 camt.053
 
-The pipeline natively parses **camt.053 (BankToCustomerStatement)** — the end-of-day statement standard used across SEPA and by most European banks (successor to SWIFT MT940). The adapter (`src/adapters/camt053.py`, pure standard library) handles the quirks that make reconciliation a job rather than a script:
-
-- namespace differences between camt.053 versions
-- **bulk entries** — one `<Ntry>` containing several `<TxDtls>` transactions, exploded into individual rows
-- **reference priority ladder** — `EndToEndId` (ignoring `NOTPROVIDED`) → `TxId` → structured creditor reference → `AcctSvcrRef` → `NtryRef`
-- references buried in unstructured remittance text (`<Ustrd>`), carried through for the agent to recover
-
-The adapter is unit-tested against a **real, bank-authored public sample file** (see Data sources below), and the generator also emits the synthetic settlement data in camt.053 shape, so the whole pipeline exercises the real format end-to-end.
+The pipeline natively parses **camt.053 (BankToCustomerStatement)** — the end-of-day statement standard used across SEPA (successor to SWIFT MT940). The adapter (`src/adapters/camt053.py`, pure standard library) handles what makes reconciliation a job rather than a script: version/namespace differences, **bulk entries** exploded into individual transactions, the **reference priority ladder** (`EndToEndId` skipping `NOTPROVIDED` → `TxId` → structured creditor ref → `AcctSvcrRef` → `NtryRef`), and references buried in unstructured remittance text. It is unit-tested against a **real, bank-authored public sample file** (see Data sources).
 
 ## Quick start
 
@@ -70,50 +83,55 @@ python src/generate_data.py     # camt.053 statement + ledger + next-window file
 python src/main.py              # reconcile → agentic triage → approval gate → report
 python src/main.py --yes        # non-interactive: auto-resolve safe items, leave risky OPEN
 python src/main.py --no-ai      # deterministic reconciliation only
-pytest tests/                   # matcher + camt.053 adapter tests (runs against the real bank sample)
+pytest tests/                   # matcher + camt.053 adapter tests (against the real bank sample)
 
-# run against the real public Danske Bank camt.053 sample:
+# against the real public Danske Bank camt.053 sample:
 python src/main.py --no-ai --scheme-file data/samples/camt053_danske_example.xml
 ```
 
-Output: a markdown report in `reports/` with an executive summary, quantified impact metrics (money at risk, % auto-resolved, analyst time saved), exceptions sorted P1-first with status/evidence, and the full agent investigation log.
+### Run as an MCP server (Claude Desktop / Claude Code)
 
-## Data sources (public domain / bank-published samples)
+```jsonc
+// claude_desktop_config.json
+{
+  "mcpServers": {
+    "settlement-sentinel": {
+      "command": "python",
+      "args": ["/absolute/path/to/settlement-sentinel/src/mcp_server.py"]
+    }
+  }
+}
+```
+
+Then, in Claude: *"Reconcile today's settlement file against the ledger, investigate the exceptions using the scheme rules, and walk me through what needs my approval."* Claude calls `reconcile_settlement`, investigates with the same tools the CLI agent uses, and records resolutions only via the human-attributed `record_resolution` tool.
+
+## Data sources (public / bank-published samples)
 
 - **Danske Bank camt.053 example file** (included at `data/samples/camt053_danske_example.xml`, used by the test suite): <https://danskeci.com/-/media/pdf/danskeci-com/iso-20022-xml/camt053_dk_example.xml>
 - **ISO 20022 official message definitions & schemas** (camt.053 XSD): <https://www.iso20022.org/iso-20022-message-definitions?search=camt.053>
 - **Goldman Sachs Developer — camt.052/053 sample reports**: <https://developer.gs.com/docs/services/transaction-banking/camt53-sample>
 - **Handelsbanken ISO 20022 XML examples**: <https://www.handelsbanken.com/en/our-services/digital-services/global-gateway/iso-20022-xml>
 
-All sample and generated data in this repository is synthetic or bank-published example data. No production settlement data is used anywhere.
-
-## Why this maps to real agentic payments infrastructure
-
-- **Severity-gated autonomy with an enforced consent boundary** — the agent auto-closes only what is provably safe; risky items always route to a human, and everything lands in an audit trail. That control boundary — not raw intelligence — is the core trust problem in agentic payments.
-- **Investigation before classification** — the agent uses tools to verify (next-window check, fee schedule, resolution history) rather than pattern-matching from a single prompt, and must show its evidence per exception.
-- **A learning system, not a static one** — the human-approval loop feeds resolved exceptions back as few-shot context, so triage converges toward this team's actual operating decisions.
-- **Scheme-agnostic core, real formats at the edge** — the matcher only needs `(ref, amount, value_date)`; the camt.053 adapter shows how real scheme/bank formats slot in front of it. UPI settlement reports or GIRO/SENT formats are the same pattern.
-- **Obvious next steps** — batch across windows, wire triage output to a ticketing system, expose the whole pipeline as an MCP server so an agent can pull settlement files itself.
+All sample and generated data in this repository is synthetic or bank-published example data. The scheme rulebook module encodes publicly known settlement-model semantics in generic form — **no proprietary scheme rulebook content is reproduced**. No production settlement data is used anywhere.
 
 ## Project structure
 
 ```
 settlement-sentinel/
 ├── src/
-│   ├── adapters/
-│   │   └── camt053.py       # ISO 20022 camt.053 parser (stdlib only)
-│   ├── generate_data.py     # synthetic data: camt.053 statement, ledger, next window, fee schedule
+│   ├── adapters/camt053.py  # ISO 20022 camt.053 parser (stdlib only)
+│   ├── generate_data.py     # synthetic data: camt.053 statement, ledger, next window, fees
 │   ├── reconcile.py         # deterministic matching engine (exact + safe fuzzy pass)
+│   ├── rulebook.py          # scheme settlement semantics (instant vs batch-net)
 │   ├── investigation.py     # the agent's investigation tools + Anthropic tool specs
 │   ├── triage_agent.py      # agentic Claude triage loop (tool use, investigation log)
-│   ├── approval.py          # approval gate, audit log, resolution recording
+│   ├── approval.py          # approval gate, immutable audit log, resolution recording
 │   ├── history.py           # resolution history — the learning loop
+│   ├── mcp_server.py        # MCP server exposing the whole engine to Claude
 │   └── main.py              # CLI orchestration + markdown report
-├── tests/
-│   ├── test_reconcile.py    # unit tests for every exception bucket
-│   └── test_camt053.py      # adapter tests against the real Danske Bank sample
-├── data/
-│   └── samples/             # public camt.053 sample (bank-published)
+├── evals/run_eval.py        # labeled eval set + precision/recall harness
+├── tests/                   # matcher tests + adapter tests against the real bank sample
+├── data/samples/            # public camt.053 sample (bank-published)
 └── reports/                 # generated reconciliation reports
 ```
 
