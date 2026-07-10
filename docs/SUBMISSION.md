@@ -1,7 +1,7 @@
 # Settlement Sentinel — Submission for Build with Claude
 
 **Repo:** <https://github.com/viggykrishna/settlement-sentinel>
-**Author:** Vigneshwari K — payments product & operations. I launched seven payment schemes across Hungary and Romania at Revolut (VIBER, GIRO, Qvik, Request to Pay, Secondary Identifier, Wero, RON in-house clearing) and I lead the reconciliation operations team this project is designed for.
+**Author:** Vigneshwari K — payments product & operations. I launched multiple payment schemes across EU at Revolut (VIBER, GIRO, Qvik, Request to Pay, Secondary Identifier, Wero, RON in-house clearing).
 
 ## The problem, from someone who signs the attestation
 
