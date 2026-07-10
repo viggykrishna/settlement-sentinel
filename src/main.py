@@ -77,6 +77,8 @@ def write_report(matched, exceptions, triage_result, gate_counts, source_desc):
         "# Settlement Reconciliation Report",
         f"Generated: {datetime.now().isoformat(timespec='seconds')}",
         f"Scheme file source: {source_desc}",
+        f"Scheme rulebook profile: "
+        f"{(triage_result or {}).get('scheme_profile', 'n/a (no AI triage)')}",
         "",
         "## Summary",
         f"- Matched transactions: **{matched}**",
@@ -177,6 +179,10 @@ def main():
     parser.add_argument("--budget", type=float, default=0.10,
                         help="hard USD budget for AI triage (default 0.10); "
                              "the run degrades gracefully rather than exceed it")
+    parser.add_argument("--scheme-profile", choices=["BATCH_NET", "INSTANT_RAIL"],
+                        default="BATCH_NET",
+                        help="scheme rulebook semantics in force — the same "
+                             "exception triages differently per rail")
     args = parser.parse_args()
 
     # --- load scheme file --------------------------------------------------
@@ -204,9 +210,10 @@ def main():
         from approval import run_gate
         meter = CostMeter(budget_usd=args.budget)
         print(f"agentic triage: Claude investigating exceptions "
-              f"(budget ${args.budget:.2f})...")
+              f"(profile {args.scheme_profile}, budget ${args.budget:.2f})...")
         try:
-            triage_result = triage(exceptions, meter=meter)
+            triage_result = triage(exceptions, meter=meter,
+                                   scheme_profile=args.scheme_profile)
         except BudgetExceeded as exc:
             # fail safe: no triage is recorded, every exception stays OPEN
             print(f"TRIAGE STOPPED — {exc}")

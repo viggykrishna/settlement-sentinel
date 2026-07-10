@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Unit tests (matcher, adapter, cost meter, approval gate, history)
+        run: pytest tests/ -q
+      - name: Layer 1 eval — deterministic matcher must score 1.00 P/R
+        run: |
+          python evals/run_eval.py | tee eval_out.txt
+          # the matcher promises exactness: fail CI on any imperfect row
+          if grep -E "^\S+ +[0-9.]+ " eval_out.txt | grep -v "1.00   1.00"; then
+            echo "matcher below 1.00 precision/recall — this is a bug"
+            exit 1
+          fi
+      - name: Offline pipeline smoke test (500-item window, no AI)
+        run: |
+          python src/generate_data.py --entries 500
+          python src/main.py --no-ai

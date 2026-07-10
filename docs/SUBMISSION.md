@@ -14,8 +14,8 @@ Two constraints make naive "AI automation" unusable here, and they shaped everyt
 A reconciliation agent that splits the workflow exactly along that line:
 
 - **Deterministic matcher** — parses real ISO 20022 camt.053 bank statements (tested against a bank-published Danske Bank sample) and matches with exact-then-conservative-fuzzy logic. No AI in the money path. The eval harness holds it to **1.00 precision/recall on all five exception classes** — anything less is defined as a bug.
-- **Agentic triage** — Claude investigates each exception with the same tools my senior analysts use (`get_scheme_rules`, `check_next_window`, `get_fee_schedule`, `lookup_history`, `extract_reference`) and must ground severity in the **scheme rulebook**, not the pattern: the same missing-settlement exception is routine timing on a batch-net rail and a P1 incident on an instant rail. Every tool call lands in the report — the agent shows its working.
-- **Human approval gate, enforced in code** — only P3 auto-resolvable items close automatically; everything else needs a named human, unattended runs leave risky items OPEN, and every decision hits an immutable audit log. Approved resolutions feed back as precedent — the learning loop.
+- **Agentic triage** — Claude investigates each exception with the same tools my senior analysts use (`get_scheme_rules`, `check_next_window`, `get_fee_schedule`, `lookup_history`, `extract_reference`) and must ground severity in the **scheme rulebook**, not the pattern. The AI layer's judgment is *measured*, not asserted: **1.00 precision/recall on P1/P2/P3 severity** against rulebook-derived ground truth — for the cheap Haiku tier alone *and* for the full tiered pipeline. The rulebook claim is demonstrated live in [`docs/RAIL_CONTRAST.md`](RAIL_CONTRAST.md): the identical missing-settlement transaction, with identical tool-call facts, is auto-closed as routine timing under `BATCH_NET` and held open as a settlement failure under `INSTANT_RAIL`. Every tool call lands in the report — the agent shows its working ([committed example](sample_report.md)).
+- **Human approval gate, enforced in code** — only P3 auto-resolvable items close automatically; everything else needs a named human, unattended runs leave risky items OPEN, and every decision hits an append-only audit log. Approved resolutions feed back as precedent — the learning loop.
 - **MCP server** — the whole engine is drivable conversationally from Claude Desktop/Code. Deliberately no nested model calls: over MCP, Claude in the client *is* the analyst, and the server exposes only deterministic, auditable tools.
 
 ## What makes v4 the differentiator: cost as an enforced property
@@ -28,15 +28,17 @@ It holds that number the way a real ops team holds a headcount budget: **Haiku c
 
 ```bash
 pip install -r requirements.txt
-python evals/run_eval.py                      # matcher: 1.00 P/R, offline, no key
+python evals/run_eval.py                      # matcher: 1.00 P/R, offline, no key (also runs in CI)
 python src/generate_data.py --entries 500     # the 500-item demo window
 export ANTHROPIC_API_KEY=sk-ant-...
 python src/main.py --yes --budget 0.10        # full run, live cost meter, < $0.10
+python src/main.py --yes --scheme-profile INSTANT_RAIL   # same data, opposite triage
+python evals/run_eval.py --with-ai            # AI severity triage: 1.00 P/R measured
 ```
 
 ## The trail
 
-Every version is one auditable commit on `main`: **v1** deterministic core → **v2** camt.053 + agentic triage + approval gate + learning loop → **v3** rulebook grounding + MCP server + eval harness → **v4** tiered routing + caching + hard budget guard. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) explains the whole arc for non-technical readers, problem space to solution space.
+Every version is one auditable commit on `main`: **v1** deterministic core → **v2** camt.053 + agentic triage + approval gate + learning loop → **v3** rulebook grounding + MCP server + eval harness → **v4** tiered routing + caching + hard budget guard → **v5** the AI layer's accuracy measured and published, the rail-contrast demonstrated live, CI enforcing the matcher's 1.00 on every push, and a precedent-poisoning guard on the learning loop. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) explains the whole arc for non-technical readers, problem space to solution space.
 
 The through-line: AI where the work is judgment, deterministic code where the work is arithmetic, a named human wherever the decision carries risk — and now, a dollar cost that is enforced, not estimated. That is what it takes for this class of tool to move from demo to a settlement desk.
 

@@ -21,7 +21,7 @@ Every tool is read-only except record_resolution. MCP clients surface tool
 calls for user approval, which is exactly the consent boundary the CLI gate
 enforces: the agent investigates freely, but a resolution is only recorded
 through an explicit, user-visible action. record_resolution also appends to
-the immutable audit log with actor attribution.
+the append-only audit log with actor attribution.
 
 Run:
     python src/mcp_server.py            # stdio transport
@@ -156,12 +156,12 @@ def record_resolution(bucket: str, settlement_ref: str, amount: str,
                       severity: str, root_cause: str, action_taken: str,
                       resolved_by: str) -> str:
     """Record an APPROVED exception resolution into the resolution history
-    and the immutable audit log. THE ONLY WRITE TOOL ON THIS SERVER — call
+    and the append-only audit log. THE ONLY WRITE TOOL ON THIS SERVER — call
     it only after the user has explicitly confirmed the resolution in
     conversation. resolved_by must identify the human approver (never an
     agent name). The recorded resolution feeds future triage as few-shot
     context."""
-    from approval import _audit  # immutable audit trail
+    from approval import _audit  # append-only audit trail
     history_store.record_resolution(
         bucket=bucket, settlement_ref=settlement_ref, amount=amount,
         severity=severity, root_cause=root_cause,
@@ -175,7 +175,7 @@ def record_resolution(bucket: str, settlement_ref: str, amount: str,
 
 @mcp.tool()
 def read_audit_log(limit: int = 20) -> str:
-    """Read the most recent entries from the immutable audit log — every
+    """Read the most recent entries from the append-only audit log — every
     resolution decision, automatic or human, with actor attribution."""
     path = DATA / "audit_log.jsonl"
     if not path.exists():

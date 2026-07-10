@@ -193,6 +193,9 @@ def main():
     parser.add_argument("--with-ai", action="store_true",
                         help="also evaluate agentic severity triage "
                              "(requires ANTHROPIC_API_KEY)")
+    parser.add_argument("--no-escalation", action="store_true",
+                        help="Haiku tier only — measures what the Sonnet "
+                             "second-opinion tier actually buys")
     args = parser.parse_args()
 
     scheme, ledger, next_window, labels = build_eval_set()
@@ -244,10 +247,12 @@ def main():
     # ---- LAYER 2: agentic severity ----------------------------------------
     if args.with_ai:
         from triage_agent import triage
-        print("\nrunning agentic triage on eval exceptions "
+        tier_desc = ("Haiku only (--no-escalation)" if args.no_escalation
+                     else "tiered: Haiku + Sonnet review")
+        print(f"\nrunning agentic triage on eval exceptions — {tier_desc} "
               "(this calls the Anthropic API)...")
         result = triage(exceptions, batch_limit=len(exceptions),
-                        verbose=False)
+                        verbose=False, escalate=not args.no_escalation)
         by_index = {t["index"]: t for t in result["triaged"]}
         gold_s, pred_s = [], []
         for i, exc in enumerate(exceptions):
@@ -257,10 +262,13 @@ def main():
                 gold_s.append(label["severity"])
                 pred_s.append(t["severity"])
         rows, mp, mr = prf(gold_s, pred_s)
-        print_table("LAYER 2 — agentic triage (severity classification)",
+        print_table(f"LAYER 2 — agentic severity triage ({tier_desc})",
                     rows, mp, mr)
+        cost = result.get("cost", {})
         print(f"\ninvestigation steps taken: "
               f"{len(result.get('investigation_log', []))}")
+        print(f"escalation: {json.dumps(result.get('escalation', {}))}")
+        print(f"eval triage cost: ${cost.get('total_usd', 0):.4f}")
 
     eval_next.unlink(missing_ok=True)
 

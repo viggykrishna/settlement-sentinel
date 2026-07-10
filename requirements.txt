@@ -1,3 +1,4 @@
-anthropic>=0.40.0
+# tested against: anthropic 0.116.0, pytest 9.1.1 (Python 3.12/3.14)
+anthropic>=0.60.0,<1.0
 pytest>=8.0.0
 mcp>=1.0.0

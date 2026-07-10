@@ -57,20 +57,27 @@ PAYLOAD_FIELDS = ("settlement_ref", "amount", "currency", "direction",
 
 SYSTEM_PROMPT = """You are a senior payment-scheme reconciliation analyst.
 You triage exceptions between a scheme settlement file and a participant's
-internal ledger. You have investigation tools — use them BEFORE classifying,
-exactly as a careful analyst would:
+internal ledger. The scheme in force runs the {profile} settlement profile.
+You have investigation tools — use them BEFORE classifying, exactly as a
+careful analyst would:
 
-- FIRST call get_scheme_rules to load the settlement semantics in force
-  (the demo dataset uses the BATCH_NET profile). Ground every severity and
-  action in those semantics: e.g. on a BATCH_NET scheme a missing-in-scheme
-  item is often a cutoff/timing difference and fees are commonly netted at
-  settlement, whereas on an INSTANT_RAIL neither is true and a duplicate
-  means funds moved twice with finality.
-- For every MISSING_IN_SCHEME_FILE exception, call check_next_window first.
-  If the transaction settled in the next window it is a cutoff/timing
-  difference: severity P3, auto_resolvable true, action is to note the
-  timing difference. If not found, it is a genuine gap: P2, escalate to the
-  scheme operator.
+- FIRST call get_scheme_rules with profile "{profile}" to load the
+  settlement semantics in force. Ground every severity and action in those
+  semantics: e.g. on a BATCH_NET scheme a missing-in-scheme item is often
+  a cutoff/timing difference and fees are commonly netted at settlement,
+  whereas on an INSTANT_RAIL neither is true and a duplicate means funds
+  moved twice with finality.
+- For every MISSING_IN_SCHEME_FILE exception, call check_next_window to
+  establish the facts, then apply the scheme semantics — the SAME facts
+  mean OPPOSITE things on different rails:
+  * On BATCH_NET: found in next window → cutoff/timing difference, P3,
+    auto_resolvable true, note the timing difference. Not found → genuine
+    gap, P2, escalate to the scheme operator.
+  * On INSTANT_RAIL: there is NO batch cutoff, so a missing settlement can
+    NEVER be a same-rail timing difference — even a next-window appearance
+    is anomalous, not benign. The payment was booked but never settled:
+    P1 if amount >10,000 or direction DEBIT, else P2; never
+    auto_resolvable; escalate as a settlement failure immediately.
 - For AMOUNT_MISMATCH, call get_fee_schedule and check whether the delta
   matches a known fee exactly. Exact fee match: P3, auto_resolvable true,
   recommend a fee-mapping rule. No match: P2, investigate.
@@ -158,7 +165,9 @@ def _parse_json(raw: str) -> dict | None:
 
 
 def _few_shot_context() -> str:
-    past = history.recent(4)
+    # human-approved precedent only — agent-made resolutions must never
+    # feed back into the agent's own calibration (poisoning guard)
+    past = history.recent(4, human_only=True)
     if not past:
         return ""
     return (
@@ -213,15 +222,23 @@ def _estimate_usd(model: str, in_tokens: int, out_tokens: int) -> float:
 # --------------------------------------------------------------- main pass --
 
 def triage(exceptions: list, batch_limit: int = 64, verbose: bool = True,
-           meter: CostMeter | None = None) -> dict:
+           meter: CostMeter | None = None,
+           scheme_profile: str = "BATCH_NET", escalate: bool = True) -> dict:
     """
     Tiered agentic triage. Haiku investigates and classifies every
     exception in chunks of CHUNK_SIZE; Sonnet reviews P1 / low-confidence
-    calls and writes the executive summary if the budget allows. Returns
+    calls and writes the executive summary if the budget allows
+    (escalate=False turns the Sonnet tier off — used by the eval harness
+    to measure what the review tier actually buys). scheme_profile selects
+    the rulebook semantics in force (BATCH_NET or INSTANT_RAIL). Returns
     triage results plus "investigation_log" and "cost".
     """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     meter = meter or CostMeter()
+
+    if len(exceptions) > batch_limit and verbose:
+        print(f"  [warn] {len(exceptions) - batch_limit} exception(s) beyond "
+              f"batch_limit={batch_limit} will NOT be triaged and stay OPEN")
 
     payload = [
         {
@@ -233,6 +250,7 @@ def triage(exceptions: list, batch_limit: int = 64, verbose: bool = True,
         for i, e in enumerate(exceptions[:batch_limit])
     ]
     few_shot = _few_shot_context()
+    system_text = SYSTEM_PROMPT.replace("{profile}", scheme_profile)
 
     triaged: list[dict] = []
     investigation_log: list[dict] = []
@@ -242,13 +260,17 @@ def triage(exceptions: list, batch_limit: int = 64, verbose: bool = True,
             print(f"  [chunk] triaging exceptions {start}..."
                   f"{start + len(chunk) - 1} ({len(chunk)} items)")
         chunk_triaged, chunk_log = _triage_chunk(
-            client, meter, chunk, few_shot, verbose)
+            client, meter, chunk, few_shot, system_text, verbose)
         triaged.extend(chunk_triaged)
         investigation_log.extend(chunk_log)
 
     result: dict = {"triaged": triaged,
-                    "investigation_log": investigation_log}
-    _escalate(client, meter, payload, result, verbose)
+                    "investigation_log": investigation_log,
+                    "scheme_profile": scheme_profile}
+    if escalate:
+        _escalate(client, meter, payload, result, verbose)
+    else:
+        result["escalation"] = {"escalated": 0, "note": "disabled by caller"}
     if not result.get("executive_summary"):
         result["executive_summary"] = _fallback_summary(triaged)
     result["cost"] = meter.summary()
@@ -256,7 +278,7 @@ def triage(exceptions: list, batch_limit: int = 64, verbose: bool = True,
 
 
 def _triage_chunk(client, meter: CostMeter, chunk: list, few_shot: str,
-                  verbose: bool) -> tuple[list, list]:
+                  system_text: str, verbose: bool) -> tuple[list, list]:
     """One agentic Haiku loop over a chunk of exceptions."""
     user_text = (
         "Triage the following reconciliation exceptions. Investigate "
@@ -266,7 +288,7 @@ def _triage_chunk(client, meter: CostMeter, chunk: list, few_shot: str,
         + json.dumps(chunk, default=str)
     )
     messages = [{"role": "user", "content": user_text}]
-    system = [{"type": "text", "text": SYSTEM_PROMPT,
+    system = [{"type": "text", "text": system_text,
                "cache_control": dict(_CACHE)}]
 
     log: list[dict] = []

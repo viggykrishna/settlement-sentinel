@@ -52,9 +52,19 @@ def record_resolution(bucket: str, settlement_ref: str, amount,
     _save(entries)
 
 
-def recent(n: int = 8) -> list[dict]:
-    """Most recent resolutions, for few-shot context in the triage prompt."""
-    return _load()[-n:]
+def recent(n: int = 8, human_only: bool = False) -> list[dict]:
+    """
+    Most recent resolutions, for few-shot context in the triage prompt.
+
+    human_only=True excludes machine-made ("sentinel-auto") resolutions —
+    the precedent-poisoning guard: agent output must never become the
+    agent's own calibration. Only decisions a named human made (or
+    explicitly approved) qualify as team precedent.
+    """
+    entries = _load()
+    if human_only:
+        entries = [e for e in entries if e.get("resolved_by") != "sentinel-auto"]
+    return entries[-n:]
 
 
 def lookup(bucket: str | None = None, ref_contains: str | None = None,

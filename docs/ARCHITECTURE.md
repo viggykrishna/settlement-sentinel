@@ -73,7 +73,7 @@ Autonomy is severity-gated, and the boundary is code, not policy text:
 
 - Only the lowest-severity, explicitly auto-resolvable items (P3) are closed automatically, logged under the actor `sentinel-auto`.
 - Everything else requires a named human to approve the resolution. In non-interactive runs, risky items **stay open** rather than defaulting to closed.
-- Every decision — automatic or human — is appended to an immutable audit log with actor attribution.
+- Every decision — automatic or human — is appended to an append-only audit log with actor attribution.
 
 **The agent proposes; the human disposes.** That single sentence is the governance model, and it answers the regulator's question directly.
 
@@ -91,6 +91,7 @@ When a human approves a resolution, that outcome is stored and fed back to the a
 | **v2** | camt.053 adapter (the ISO 20022 bank-statement standard), agentic triage with investigation tools, approval gate, learning loop | Real input format; AI does the judgment work; humans keep control; the system starts learning |
 | **v3** | Scheme rulebook module, MCP server, evaluation harness | See below — grounding, a second runtime, and proof of correctness |
 | **v4** | Tiered model routing, prompt caching, cost meter with a hard budget guard | See below — the economics of a settlement window, measured and enforced |
+| **v5** | AI-layer accuracy measured (1.00 severity precision/recall, both tiers), live rail-contrast demo, continuous integration, precedent-poisoning guard | Every claim the system makes is now either enforced by code or measured by an eval — including the AI's judgment itself |
 
 ### v3 in detail
 

@@ -1,5 +1,7 @@
 # Settlement Sentinel
 
+[![CI](https://github.com/viggykrishna/settlement-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/viggykrishna/settlement-sentinel/actions/workflows/ci.yml)
+
 **A payment-scheme reconciliation agent, built by a payments operator. Deterministic matching, rulebook-grounded agentic triage, human-gated resolution — available as a CLI pipeline and as an MCP server that Claude can drive directly. A full 500-item settlement window is triaged for under $0.10, measured and enforced by the run itself.**
 
 I run reconciliation operations for live European payment schemes (instant rails, batch clearing, in-house clearing) and manage the team that triages these exceptions by hand every settlement window. This project automates the part of that workflow where AI genuinely helps — and deliberately keeps it out of the part where it doesn't.
@@ -47,7 +49,7 @@ Three design decisions that come from running scheme operations, not from generi
 
 2. **Severity comes from the rulebook, not the pattern.** The same exception means different things on different rails, and the triage agent is forced to load the scheme's settlement semantics (`get_scheme_rules`) before classifying. A missing-in-scheme booking on a **batch-net** scheme is often a cutoff timing difference — check the next cycle before escalating. The identical exception on an **instant rail** can *never* be a same-rail timing difference, because there is no cutoff — it means the payment was booked but never settled. Same pattern, opposite action. A pattern-matching classifier gets this wrong; an analyst who knows the rulebook doesn't.
 
-3. **Autonomy is severity-gated, and the boundary is enforced in code.** The agent auto-closes only P3 + auto-resolvable items (logged as `sentinel-auto`). Everything else requires an explicit human approval, and in non-interactive mode risky items stay OPEN rather than being closed by default. Every decision — automatic or human — lands in an immutable audit log with actor attribution. The agent proposes; the human disposes. The same boundary applies over MCP: `record_resolution` is the only write tool on the server and requires a named human approver.
+3. **Autonomy is severity-gated, and the boundary is enforced in code.** The agent auto-closes only P3 + auto-resolvable items (logged as `sentinel-auto`). Everything else requires an explicit human approval, and in non-interactive mode risky items stay OPEN rather than being closed by default. Every decision — automatic or human — lands in an append-only audit log with actor attribution. The agent proposes; the human disposes. The same boundary applies over MCP: `record_resolution` is the only write tool on the server and requires a named human approver.
 
 ## The agent investigates before it classifies
 
@@ -82,15 +84,25 @@ Every run prints a per-model cost breakdown (tokens in/out, cache reads/writes, 
 
 ## Evaluation
 
-`evals/run_eval.py` builds a labeled synthetic set (32 exception cases across 8 scenario types, each with ground-truth bucket and rulebook-derived expected severity) and reports precision/recall per class:
+`evals/run_eval.py` builds a labeled synthetic set (32 exception cases across 8 scenario types, each with ground-truth bucket and rulebook-derived expected severity) and reports precision/recall per class. **Both layers are measured, including the cheap tier alone** — cost optimisation is only a result if quality is proven retained:
 
-- **Layer 1 — deterministic matcher** (offline): bucket classification. The matcher promises exactness; current result is 1.00 precision/recall across all buckets — anything less is a bug, not a tuning problem.
-- **Layer 2 — agentic triage** (`--with-ai`): severity classification against rulebook-derived ground truth, including the cases that *require* investigation to get right (fee vs non-fee mismatches, timing vs genuine gaps).
+| Layer | What's measured | Result (live) | Cost |
+|---|---|---|---|
+| 1 — deterministic matcher | bucket classification, offline | **1.00 P/R, all 5 classes** (enforced in CI) | $0 |
+| 2 — Haiku tier alone (`--no-escalation`) | severity vs rulebook ground truth | **1.00 P/R on P1/P2/P3** | $0.0460 |
+| 2 — full tiered (Haiku + Sonnet review) | severity vs rulebook ground truth | **1.00 P/R on P1/P2/P3**; Sonnet reviewed 12 flagged items, 0 revisions needed | $0.0786 |
+
+The eval set includes every case that *requires* investigation to get right (fee vs non-fee mismatches, timing vs genuine gaps). That the Sonnet reviewer found nothing to revise on this set is the measured justification for routing the queue to Haiku; the senior tier exists for the long tail an enumerable eval can't contain — and for the governance requirement that every P1 gets a second pair of eyes.
 
 ```bash
-python evals/run_eval.py            # layer 1, offline
-python evals/run_eval.py --with-ai  # layers 1 + 2 (needs ANTHROPIC_API_KEY)
+python evals/run_eval.py                            # layer 1, offline (runs in CI)
+python evals/run_eval.py --with-ai                  # layer 2, tiered (needs ANTHROPIC_API_KEY)
+python evals/run_eval.py --with-ai --no-escalation  # layer 2, Haiku tier alone
 ```
+
+## Same exception, opposite action — the rulebook, demonstrated
+
+The project's central domain claim is demonstrated live in [`docs/RAIL_CONTRAST.md`](docs/RAIL_CONTRAST.md): the same transaction (`STL8B143C4B574B`, booked in the ledger, missing from the scheme file, present in the next window) is **auto-closed as a P3 cutoff-timing difference under `--scheme-profile BATCH_NET`** and **held OPEN as a P2 booked-but-never-settled failure under `--scheme-profile INSTANT_RAIL`** — identical facts from the same tool call, opposite disposition, because the rulebook is what changed. A full generated report is committed at [`docs/sample_report.md`](docs/sample_report.md).
 
 ## Real scheme file format: ISO 20022 camt.053
 
@@ -111,6 +123,9 @@ pytest tests/                   # matcher + adapter + cost-meter tests
 # the v4 cost demo: a 500-item settlement window, triaged for < $0.10
 python src/generate_data.py --entries 500
 python src/main.py --yes --budget 0.10
+
+# the rulebook contrast: same data, opposite triage (see docs/RAIL_CONTRAST.md)
+python src/main.py --yes --scheme-profile INSTANT_RAIL
 
 # against the real public Danske Bank camt.053 sample:
 python src/main.py --no-ai --scheme-file data/samples/camt053_danske_example.xml
@@ -153,7 +168,7 @@ settlement-sentinel/
 │   ├── investigation.py     # the agent's investigation tools + Anthropic tool specs
 │   ├── triage_agent.py      # tiered agentic triage: Haiku queue + Sonnet review, cached
 │   ├── cost_meter.py        # per-call token pricing, budget guard, degradation ladder
-│   ├── approval.py          # approval gate, immutable audit log, resolution recording
+│   ├── approval.py          # approval gate, append-only audit log, resolution recording
 │   ├── history.py           # resolution history — the learning loop
 │   ├── mcp_server.py        # MCP server exposing the whole engine to Claude
 │   └── main.py              # CLI orchestration + markdown report
@@ -174,6 +189,16 @@ Each version is a single commit on `main`, so the evolution is auditable end to 
 | **v3** — `0718d18` | Scheme rulebook grounding, MCP server, evaluation harness | Severity from settlement semantics, not patterns; Claude Desktop/Code can drive the engine directly; matcher exactness proven at 1.00 precision/recall |
 | **v3 docs** — `d9f3555` | `docs/ARCHITECTURE.md` | Problem-space → solution-space explanation for non-technical leaders |
 | **v4** | Tiered model routing (Haiku → Sonnet), prompt caching, cost meter with hard budget guard, 500-item open-format demo batch | A full settlement window triaged for a **measured** $0.0934 — cost as an enforced property, with fail-safe degradation |
+| **v5** | Layer 2 eval published (1.00 P/R both tiers), `--scheme-profile` rail-contrast demo, CI, approval-gate tests, precedent-poisoning guard | The AI layer's *correctness* measured, not asserted; the signature domain insight demonstrated live; every claim now enforced by CI or an eval |
+
+## Known limits and roadmap
+
+Stated plainly, because a tool for attestations should not oversell itself:
+
+- **`batch_limit` caps AI triage at 64 exceptions per run** (the run warns and leaves the remainder OPEN — fail-safe, but a 1,000-item window with >64 exceptions needs multiple runs today). The natural v6 is the **Message Batches API**: 50% token discount, ideal for non-interactive overnight windows where the answer is needed by morning, not by minute.
+- **The learning loop has a precedent-poisoning guard** (only human-approved resolutions become few-shot precedent — agent output never calibrates the agent), but no human review workflow for *correcting* bad precedent yet; in production this would be a supervised table, not a JSON file.
+- **The scheme profiles are generic public-knowledge summaries.** A live deployment loads the participant's actual rulebook extracts into `src/rulebook.py` — the module is shaped for that swap.
+- **The audit log is append-only JSONL with actor attribution** — the semantics a regulator needs, but production would put it in WORM storage.
 
 ## Author
 

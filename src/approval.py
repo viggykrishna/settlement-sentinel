@@ -14,7 +14,7 @@ This module enforces that boundary:
                             (--yes / CI) the items stay OPEN — the agent
                             never closes risky items without a human.
 
-Every decision — automatic or human — is appended to an immutable JSONL
+Every decision — automatic or human — is appended to an append-only JSONL
 audit log (data/audit_log.jsonl): who, what, when, on what evidence.
 
 Approved resolutions are also recorded into the resolution history, which
