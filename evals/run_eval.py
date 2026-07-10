@@ -196,6 +196,9 @@ def main():
     parser.add_argument("--no-escalation", action="store_true",
                         help="Haiku tier only — measures what the Sonnet "
                              "second-opinion tier actually buys")
+    parser.add_argument("--strict", action="store_true",
+                        help="exit non-zero unless Layer 1 scores exactly "
+                             "1.00 precision/recall on every class (CI gate)")
     args = parser.parse_args()
 
     scheme, ledger, next_window, labels = build_eval_set()
@@ -243,6 +246,14 @@ def main():
     rows, mp, mr = prf(gold_b, pred_b)
     print_table("LAYER 1 — deterministic matcher (bucket classification)",
                 rows, mp, mr)
+    if args.strict:
+        imperfect = [(c, p, r) for c, p, r, _, _ in rows
+                     if p < 1.0 or r < 1.0]
+        if imperfect or missed:
+            print(f"STRICT MODE FAIL: matcher below 1.00 — "
+                  f"imperfect classes {imperfect}, missed {missed}")
+            sys.exit(1)
+        print("strict mode: matcher at 1.00 precision/recall on every class")
 
     # ---- LAYER 2: agentic severity ----------------------------------------
     if args.with_ai:
