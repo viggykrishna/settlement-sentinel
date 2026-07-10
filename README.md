@@ -51,6 +51,35 @@ Three design decisions that come from running scheme operations, not from generi
 
 3. **Autonomy is severity-gated, and the boundary is enforced in code.** The agent auto-closes only P3 + auto-resolvable items (logged as `sentinel-auto`). Everything else requires an explicit human approval, and in non-interactive mode risky items stay OPEN rather than being closed by default. Every decision — automatic or human — lands in an append-only audit log with actor attribution. The agent proposes; the human disposes. The same boundary applies over MCP: `record_resolution` is the only write tool on the server and requires a named human approver.
 
+## Where else this applies
+
+Nothing payments-specific lives in the core. The matcher needs only a join key, an
+amount, and a date; domain knowledge sits at the edges — format adapters on the way
+in, rulebook profiles grounding the triage. Swapping domains means writing one
+adapter and one rulebook profile; the agentic investigation loop, approval gate,
+audit trail, and learning loop are domain-invariant.
+
+The same engine maps directly onto:
+
+- **Intraday trade-break reconciliation** — executed orders vs exchange confirms vs
+  OMS records; severity gating by settlement risk (a break threatening a margin call
+  is P1, a commission rounding difference is P3). Compressed settlement cycles
+  (India is piloting T+0) make minutes-not-hours triage an operational requirement.
+- **Positions reconciliation** — internal book vs custodian/depository statements;
+  join key becomes (ISIN, quantity, account), and "check corporate-action calendar"
+  replaces "check next settlement window" as the timing-difference test.
+- **Derivatives lifecycle** — exercise/assignment vs clearing reports, margin vs
+  collateral; severity depends on contract semantics (unmatched assignment near
+  expiry vs mid-cycle), which is exactly what rulebook-grounded triage handles.
+- **Merchant settlement reconciliation (B2B SaaS)** — orders vs gateway settlement
+  files vs bank credits, with the approval gate as the product UI: plain-language
+  exception explanations with approve/dispute actions for business users.
+- **Nostro/treasury reconciliation** — the camt.053 adapter is already the native
+  input format for correspondent bank statements.
+- **Corporate close** — ledger vs bank vs intercompany; the append-only audit log with
+  actor attribution is the compliance requirement (SOX/IFRS) in this domain, not a
+  nice-to-have.
+
 ## The agent investigates before it classifies
 
 For each exception, Claude uses the same checks a senior analyst runs, and must cite its evidence per exception (the full tool-call log goes into the report):

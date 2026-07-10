@@ -24,6 +24,76 @@ A recon tool that costs more than the analysts it assists never leaves the pilot
 
 It holds that number the way a real ops team holds a headcount budget: **Haiku clears the whole queue** with the full investigation toolset (the junior analysts), **Sonnet second-opinions every P1** and writes the executive summary (the senior reviewer), prompt caching re-reads the growing investigation transcript at ~10% price, and a **cost meter prices every call and checks the budget before the next one is made**. Degradation is fail-safe and honest: the senior review trims to the highest-exposure items, then skips (annotated in the report, never hidden), and as a last resort triage stops and items stay OPEN for a human. The system never silently overspends and never closes an item to save money. Every run prints the per-model token and dollar breakdown into the report — the number is reproducible, not asserted.
 
+## Commercial applicability — beyond payment schemes
+
+The reference implementation reconciles payment-scheme settlement files, but the
+architecture was deliberately built domain-agnostic: two independent records of the
+same economic event, deterministic matching, rulebook-grounded exception triage,
+human-gated resolution, and a learning loop. Domain knowledge lives only at the
+edges — format adapters (camt.053 today) and rulebook profiles (batch-net vs
+instant-rail today). Entering a new domain means one adapter plus one rulebook
+profile; everything else is invariant.
+
+The reconciliation software market crossed USD 2.5B in 2025 and is projected to
+grow at ~13% CAGR toward USD 10B by 2036, with BFSI holding roughly 45% share —
+and the industry direction is explicitly toward AI-assisted matching that learns
+from historical resolutions with governed, auditable exception handling. That is
+precisely the pattern this project implements: agentic investigation with a
+severity-gated autonomy boundary and an append-only audit trail.
+
+Concrete adjacent deployments:
+
+**1. Intraday order / trade-break reconciliation (brokerage).** Executed orders vs
+exchange confirmations vs OMS records. India's move to T+1 (2023) and active T+0
+pilots compress the window in which breaks must be found, triaged, and resolved
+from hours to minutes — batch recon surfaces exceptions after the settlement window
+has closed. An agent that investigates breaks at occurrence and prioritises by
+settlement risk (margin-call exposure first) is what T+0 operationally demands.
+
+**2. Positions reconciliation (wealth & trading / custody).** Internal position
+book vs custodian and depository statements. Same pattern, different join keys
+(ISIN, quantity, account). Most position breaks are corporate-action or
+settlement-lag artifacts — the "check next window" investigation tool becomes
+"check corporate-action calendar," distinguishing timing artifacts from genuine
+breaks before escalation.
+
+**3. Options / derivatives lifecycle reconciliation.** Exercise and assignment
+records vs clearing-house reports; margin calls vs collateral postings. Severity
+here depends on contract semantics — an unmatched assignment near expiry is
+critical, the same mismatch mid-cycle is routine — which is exactly the judgment
+the rulebook-grounding layer encodes and a pattern-matching classifier gets wrong.
+
+**4. Merchant settlement reconciliation as a B2B SaaS product.** Merchant order
+records vs payment-gateway settlement files vs bank credits — the core
+Razorpay-ecosystem problem. India is the hardest version of this market: sellers
+reconcile across multiple marketplaces and gateways, TDS/TCS deduction chains,
+GSTR-2B input-credit matching, NACH returns, and COD remittance — a single
+transaction can create four parallel reconciliation obligations. The productisation
+insight: the human-approval gate becomes the user interface. A business owner sees
+a plain-language explanation ("₹4,200 short on this payout: gateway fee + TDS,
+both verified against your rate card") with approve/dispute actions — not a raw
+reconciliation report only an ops analyst can read.
+
+**5. Treasury / nostro-vostro reconciliation (banks, fintechs).** Expected vs
+actual movements across correspondent accounts. The camt.053 adapter is already the
+native input format — nostro statements arrive as exactly these ISO 20022 messages.
+Investigation tools map to FX cutoffs and correspondent fee schedules.
+
+**6. Corporate financial close.** Ledger vs bank vs intercompany entries at
+period-end, under SOX/IFRS audit requirements. In this domain the append-only audit
+log with actor attribution is not a feature — it is the compliance requirement, and
+it is already built.
+
+**7. Insurance claims and payout reconciliation.** Claims approved vs payouts
+executed vs reinsurance recoveries — the same triple-match structure with a
+policy-rules rulebook profile.
+
+The common thread: every domain above currently resolves exceptions with analyst
+headcount that scales linearly with volume. This architecture converts that into a
+fixed engineering investment plus a controllable API cost — with the trust
+boundary (investigate freely, act only within a provably safe zone, audit
+everything) that regulated financial operations actually require.
+
 ## How to verify in five minutes
 
 ```bash
