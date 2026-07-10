@@ -202,4 +202,4 @@ Stated plainly, because a tool for attestations should not oversell itself:
 
 ## Author
 
-Vigneshwari K — payments product & operations. Launched 7 payment schemes across Hungary and Romania at Revolut (VIBER, GIRO, Qvik, Request to Pay, Secondary Identifier, Wero, RON in-house clearing); lead the reconciliation ops team this project is designed for.
+Vigneshwari K — payments product & operations. Launched multiple payment schemes across EU at Revolut (VIBER, GIRO, Qvik, Request to Pay, Secondary Identifier, Wero, RON in-house clearing)
