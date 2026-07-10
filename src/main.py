@@ -116,8 +116,29 @@ def write_report(matched, exceptions, triage_result, gate_counts, source_desc):
                 f"- **Evidence:** {t.get('evidence', '-')}",
                 f"- **Action:** {t['recommended_action']}",
                 f"- **Auto-resolvable:** {'yes' if t['auto_resolvable'] else 'no'}",
-                "",
             ]
+            if t.get("review"):
+                lines.append(f"- **Senior review (Sonnet):** {t['review']}")
+            lines.append("")
+
+        cost = triage_result.get("cost")
+        if cost:
+            lines += ["## Cost of This Run",
+                      f"- Budget: **${cost['budget_usd']:.2f}** — spent "
+                      f"**${cost['total_usd']:.4f}** "
+                      f"({'within budget ✅' if cost['within_budget'] else 'OVER BUDGET ❌'})",
+                      ""]
+            for model, m in cost["by_model"].items():
+                lines.append(
+                    f"- `{model}`: {m['calls']} call(s), "
+                    f"{m['input_tokens']:,} in / {m['output_tokens']:,} out, "
+                    f"{m['cache_read_tokens']:,} cache-read / "
+                    f"{m['cache_write_tokens']:,} cache-write tokens "
+                    f"→ ${m['cost_usd']:.4f}")
+            esc = triage_result.get("escalation")
+            if esc:
+                lines.append(f"- Escalation: {json.dumps(esc)}")
+            lines.append("")
 
         log = triage_result.get("investigation_log", [])
         if log:
@@ -153,6 +174,9 @@ def main():
     parser.add_argument("--yes", action="store_true",
                         help="non-interactive: auto-resolve safe items only, "
                              "leave risky items OPEN")
+    parser.add_argument("--budget", type=float, default=0.10,
+                        help="hard USD budget for AI triage (default 0.10); "
+                             "the run degrades gracefully rather than exceed it")
     args = parser.parse_args()
 
     # --- load scheme file --------------------------------------------------
@@ -175,18 +199,30 @@ def main():
 
     triage_result, gate_counts = None, None
     if not args.no_ai and exceptions:
+        from cost_meter import BudgetExceeded, CostMeter
         from triage_agent import triage
         from approval import run_gate
-        print("agentic triage: Claude investigating exceptions...")
-        triage_result = triage(exceptions)
-        p1 = sum(1 for t in triage_result["triaged"] if t["severity"] == "P1")
-        print(f"triage complete — {p1} P1 exception(s) flagged, "
-              f"{len(triage_result.get('investigation_log', []))} investigation steps")
+        meter = CostMeter(budget_usd=args.budget)
+        print(f"agentic triage: Claude investigating exceptions "
+              f"(budget ${args.budget:.2f})...")
+        try:
+            triage_result = triage(exceptions, meter=meter)
+        except BudgetExceeded as exc:
+            # fail safe: no triage is recorded, every exception stays OPEN
+            print(f"TRIAGE STOPPED — {exc}")
+            print("all exceptions remain OPEN for manual triage")
+        if triage_result:
+            p1 = sum(1 for t in triage_result["triaged"] if t["severity"] == "P1")
+            cost = triage_result["cost"]
+            print(f"triage complete — {p1} P1 exception(s) flagged, "
+                  f"{len(triage_result.get('investigation_log', []))} investigation steps")
+            print(f"cost: ${cost['total_usd']:.4f} of ${cost['budget_usd']:.2f} budget "
+                  f"({'within budget' if cost['within_budget'] else 'OVER BUDGET'})")
 
-        print("running approval gate...")
-        gate_counts = run_gate(exceptions, triage_result["triaged"],
-                               interactive=not args.yes)
-        print(f"gate: {gate_counts}")
+            print("running approval gate...")
+            gate_counts = run_gate(exceptions, triage_result["triaged"],
+                                   interactive=not args.yes)
+            print(f"gate: {gate_counts}")
 
     path = write_report(matched, exceptions, triage_result, gate_counts,
                         source_desc)

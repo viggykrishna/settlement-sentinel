@@ -90,6 +90,7 @@ When a human approves a resolution, that outcome is stored and fed back to the a
 | **v1** | Deterministic matcher, exception buckets, basic reports | The reproducible core: proves the books balance without AI |
 | **v2** | camt.053 adapter (the ISO 20022 bank-statement standard), agentic triage with investigation tools, approval gate, learning loop | Real input format; AI does the judgment work; humans keep control; the system starts learning |
 | **v3** | Scheme rulebook module, MCP server, evaluation harness | See below — grounding, a second runtime, and proof of correctness |
+| **v4** | Tiered model routing, prompt caching, cost meter with a hard budget guard | See below — the economics of a settlement window, measured and enforced |
 
 ### v3 in detail
 
@@ -101,6 +102,18 @@ When a human approves a resolution, that outcome is stored and fed back to the a
 
 - *Layer 1 — the matcher* promises exactness. The harness injects a labeled synthetic exception set and verifies the matcher classifies every bucket at 1.00 precision and recall. Anything less is a bug, not a tuning problem. (Current result: 1.00 across all five classes.)
 - *Layer 2 — the triage agent* promises sound judgment. The harness derives ground-truth severities from the rulebook semantics (e.g. *duplicate on the scheme side → P1*; *amount mismatch whose delta equals a known fee → P3*) and scores the agent's severity calls against them.
+
+### v4 in detail: cost as an enforced property
+
+A tool that costs more to run than the work it saves never leaves the pilot phase. v4 makes the cost of a settlement window a measured, enforced number rather than a hope. In a live run, a **500-transaction window** (450 matched deterministically at zero AI cost, 50 exceptions investigated and triaged) completed for **$0.0934 against a hard $0.10 budget**.
+
+Three mechanisms, each with a direct operations analogy:
+
+**Tiered model routing (`src/triage_agent.py`).** The fast, inexpensive model (Haiku) clears the entire exception queue with the full investigation toolset — exactly like the junior analysts who work the queue. Everything it rates P1, and everything it marks low-confidence, goes to the stronger model (Sonnet) for a second opinion on the evidence already gathered — exactly like the senior analyst who reviews only what is flagged. The senior model also writes the executive summary. Roughly 60% of the AI spend goes to the junior tier, 40% to the senior review.
+
+**Prompt caching.** Each investigation turn re-sends the conversation so far; caching means the repeated prefix is re-read at about a tenth of the normal input price instead of being re-processed in full. Getting this right required chunking the batch so each turn stays inside the cache's technical limits — the first live run showed a silent cache miss in the telemetry, which is precisely why the metering exists.
+
+**A hard budget guard (`src/cost_meter.py`).** Every API call is priced from its actual token usage, and the projected cost of the *next* call is checked against the budget before it is made. When money runs short the system degrades gracefully, in order: the senior review trims to the highest-exposure items that still fit; then it is skipped entirely (recorded in the report, never hidden); as a last resort triage stops and the remaining exceptions stay OPEN for a human. The failure mode is always "a human looks at it," never "the system overspent" and never "the system closed something to save money."
 
 ---
 

@@ -1,6 +1,6 @@
 # Settlement Sentinel
 
-**A payment-scheme reconciliation agent, built by a payments operator. Deterministic matching, rulebook-grounded agentic triage, human-gated resolution — available as a CLI pipeline and as an MCP server that Claude can drive directly.**
+**A payment-scheme reconciliation agent, built by a payments operator. Deterministic matching, rulebook-grounded agentic triage, human-gated resolution — available as a CLI pipeline and as an MCP server that Claude can drive directly. A full 500-item settlement window is triaged for under $0.10, measured and enforced by the run itself.**
 
 I run reconciliation operations for live European payment schemes (instant rails, batch clearing, in-house clearing) and manage the team that triages these exceptions by hand every settlement window. This project automates the part of that workflow where AI genuinely helps — and deliberately keeps it out of the part where it doesn't.
 
@@ -12,7 +12,9 @@ I run reconciliation operations for live European payment schemes (instant rails
                  ┌──────────────────────── DOMAIN CORE (deterministic) ───────────────────────┐
 camt.053 ──►     │                                                                            │
  adapter  ──►  matcher ──► exceptions ──► triage agent ──► approval gate ──► report + audit log
-ledger CSV ──►   │             │          (Claude + tools)      │                              │
+ledger CSV ──►   │             │       Haiku 4.5 (queue) ──►    │                              │
+                 │             │       Sonnet 4.6 (P1 review)   │        cost meter +          │
+                 │             │       [budget-guarded, cached] │        hard $ budget         │
                  └─────────────┼────────────────┬───────────────┼──────────────────────────────┘
                                │                │               │
                                │        investigation tools     └── approved resolutions ──┐
@@ -57,6 +59,27 @@ For each exception, Claude uses the same checks a senior analyst runs, and must 
 - `lookup_history` — how did *this team* resolve the same pattern before? (approved resolutions feed back as few-shot context — the learning loop)
 - `extract_reference` — recover a reference buried in free-text remittance info
 
+## v4: The economics of a settlement window (measured, not asserted)
+
+A reconciliation tool that costs more to run than the analysts it assists is a demo, not a product. v4 makes the cost per window a **first-class, enforced property**, the same way v3's eval harness made matcher exactness one.
+
+**Live measured run** — 500 transactions (450 matched deterministically at zero AI cost, 50 exceptions triaged agentically):
+
+| Stage | Model | What it did | Cost |
+|---|---|---|---|
+| Matching | — (deterministic) | 450/500 matched, 50 exceptions raised | $0.0000 |
+| Queue triage | Haiku 4.5 | investigated + classified all 50 exceptions (2 chunks, tools, cached prefix) | $0.0584 |
+| Senior review | Sonnet 4.6 | second opinion on every flagged P1, wrote the executive summary | $0.0350 |
+| **Total** | | **full 500-item window** | **$0.0934 of a $0.10 budget** |
+
+How it stays under budget:
+
+1. **Tiered routing** — Haiku 4.5 (cheap, fast) clears the whole queue with the full investigation toolset. Anything it rates P1 or marks low-confidence gets a second opinion from Sonnet 4.6 on the already-gathered evidence. This is how a real ops team staffs a window: juniors clear the queue, the senior reviews what's flagged.
+2. **Prompt caching** — the system prompt, tool definitions, and the growing investigation transcript are cache-marked, so each tool turn re-reads the prefix at ~10% of the input price. (The first live run exposed a real subtlety: a tool turn with 13 parallel calls exceeded the cache's 20-block lookback window and silently paid full price — fixed by chunking and double breakpoints. The telemetry made the miss visible; that's the point of metering.)
+3. **A hard budget guard** — every API call is priced from its actual token usage and checked against the budget *before* the next call is made. Degradation is graceful and fail-safe: first the Sonnet review trims to the highest-exposure items that still fit (observed live: 13 of 17 reviewed, $0.0988 total), then it skips entirely (annotated in the report, never hidden), and as a last resort triage stops and items stay OPEN for a human. The agent never silently overspends and never silently closes an item to save money.
+
+Every run prints a per-model cost breakdown (tokens in/out, cache reads/writes, dollars) and writes it into the report — the moderator can reproduce the number, not take it on faith.
+
 ## Evaluation
 
 `evals/run_eval.py` builds a labeled synthetic set (32 exception cases across 8 scenario types, each with ground-truth bucket and rulebook-derived expected severity) and reports precision/recall per class:
@@ -80,10 +103,14 @@ pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...
 
 python src/generate_data.py     # camt.053 statement + ledger + next-window file + fee schedule
-python src/main.py              # reconcile → agentic triage → approval gate → report
+python src/main.py              # reconcile → tiered agentic triage → approval gate → report
 python src/main.py --yes        # non-interactive: auto-resolve safe items, leave risky OPEN
 python src/main.py --no-ai      # deterministic reconciliation only
-pytest tests/                   # matcher + camt.053 adapter tests (against the real bank sample)
+pytest tests/                   # matcher + adapter + cost-meter tests
+
+# the v4 cost demo: a 500-item settlement window, triaged for < $0.10
+python src/generate_data.py --entries 500
+python src/main.py --yes --budget 0.10
 
 # against the real public Danske Bank camt.053 sample:
 python src/main.py --no-ai --scheme-file data/samples/camt053_danske_example.xml
@@ -124,7 +151,8 @@ settlement-sentinel/
 │   ├── reconcile.py         # deterministic matching engine (exact + safe fuzzy pass)
 │   ├── rulebook.py          # scheme settlement semantics (instant vs batch-net)
 │   ├── investigation.py     # the agent's investigation tools + Anthropic tool specs
-│   ├── triage_agent.py      # agentic Claude triage loop (tool use, investigation log)
+│   ├── triage_agent.py      # tiered agentic triage: Haiku queue + Sonnet review, cached
+│   ├── cost_meter.py        # per-call token pricing, budget guard, degradation ladder
 │   ├── approval.py          # approval gate, immutable audit log, resolution recording
 │   ├── history.py           # resolution history — the learning loop
 │   ├── mcp_server.py        # MCP server exposing the whole engine to Claude
@@ -134,6 +162,18 @@ settlement-sentinel/
 ├── data/samples/            # public camt.053 sample (bank-published)
 └── reports/                 # generated reconciliation reports
 ```
+
+## Trail of updates
+
+Each version is a single commit on `main`, so the evolution is auditable end to end:
+
+| Version | What it added | Why |
+|---|---|---|
+| **v1** — `bfb80ab` | Deterministic matcher, exception buckets, basic reports | The reproducible core: prove the books balance with no AI in the money path |
+| **v2** — `0641ac0` | camt.053 adapter, agentic triage with investigation tools, approval gate, learning loop | Real bank-statement format; AI takes the judgment work; humans keep control; approved resolutions feed back as precedent |
+| **v3** — `0718d18` | Scheme rulebook grounding, MCP server, evaluation harness | Severity from settlement semantics, not patterns; Claude Desktop/Code can drive the engine directly; matcher exactness proven at 1.00 precision/recall |
+| **v3 docs** — `d9f3555` | `docs/ARCHITECTURE.md` | Problem-space → solution-space explanation for non-technical leaders |
+| **v4** | Tiered model routing (Haiku → Sonnet), prompt caching, cost meter with hard budget guard, 500-item open-format demo batch | A full settlement window triaged for a **measured** $0.0934 — cost as an enforced property, with fail-safe degradation |
 
 ## Author
 

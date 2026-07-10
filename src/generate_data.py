@@ -23,6 +23,7 @@ Injected exception types (what reconciliation teams actually deal with):
   - reference truncation / format drift
 """
 
+import argparse
 import csv
 import json
 import random
@@ -130,7 +131,7 @@ def write_camt053(rows: list[dict], path: Path, stmt_date: str):
 
 # ------------------------------------------------------------- generator ---
 
-def generate():
+def generate(n_clean: int = N_CLEAN, n_exceptions: int = N_EXCEPTIONS):
     DATA_DIR.mkdir(exist_ok=True)
     base = datetime(2026, 7, 6)
     next_window_date = (base + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -138,14 +139,14 @@ def generate():
     scheme_rows, ledger_rows, next_window_rows = [], [], []
 
     # --- clean, matching transactions -------------------------------------
-    for _ in range(N_CLEAN):
+    for _ in range(n_clean):
         t = _txn(base)
         scheme_rows.append(dict(t))
         ledger_rows.append(dict(t))
 
     # --- injected exceptions ----------------------------------------------
     missing_in_scheme_count = 0
-    for i in range(N_EXCEPTIONS):
+    for i in range(n_exceptions):
         t = _txn(base)
         kind = i % 5
 
@@ -213,4 +214,11 @@ def generate():
 
 
 if __name__ == "__main__":
-    generate()
+    parser = argparse.ArgumentParser(description="Generate sample data")
+    parser.add_argument(
+        "--entries", type=int, default=N_CLEAN + N_EXCEPTIONS,
+        help="approximate total transactions (10%% become exceptions); "
+             "e.g. --entries 500 for the v4 cost demo")
+    args = parser.parse_args()
+    n_exc = max(5, args.entries // 10)
+    generate(n_clean=args.entries - n_exc, n_exceptions=n_exc)
